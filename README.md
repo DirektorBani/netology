@@ -1,5 +1,5 @@
 # netology-devops
-В файле .gitignore будур проигнорированны: 
+В файле .gitignore будут проигнорированны: 
 1) Директория **/.terraform/*
 2) Файлы с расширением *.tfstate*
 3) Файлы с расширением *.tfvars и файл *.tfvars.json
