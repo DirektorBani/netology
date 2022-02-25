@@ -6,3 +6,6 @@
 4) Файлы логов начинающиеся на crash * .log
 5) Файлы override.tf, override.tf.json, *_override.tf, *_override.tf.json
 6) Файлы с расширением.terraformrc и файл terraform.rc
+
+
+Коммиты в ветке fix
