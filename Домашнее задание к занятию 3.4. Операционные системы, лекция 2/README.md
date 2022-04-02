@@ -5,17 +5,7 @@
 ![img.png](img.png)
 В systemd запуск сервиса выглядит так:
 
-[Unit]
-Description=Node Exporter
-
-[Service]
-User=root
-EnvironmentFile=-/etc/sysconfig/node_exporter
-ExecStart=/usr/local/bin/node_exporter $OPTIONS
-
-[Install]
-WantedBy=multi-user.target[Unit]
-Description=Node Exporter
+![img_7.png](img_7.png)
 
 1. Ознакомьтесь с опциями node_exporter и выводом `/metrics` по-умолчанию. Приведите несколько опций, которые вы бы выбрали для базового мониторинга хоста по CPU, памяти, диску и сети.
 
