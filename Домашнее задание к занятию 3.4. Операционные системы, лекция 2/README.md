@@ -3,6 +3,19 @@
 1. На лекции мы познакомились с [node_exporter](https://github.com/prometheus/node_exporter/releases). В демонстрации его исполняемый файл запускался в background. Этого достаточно для демо, но не для настоящей production-системы, где процессы должны находиться под внешним управлением. Используя знания из лекции по systemd, создайте самостоятельно простой [unit-файл](https://www.freedesktop.org/software/systemd/man/systemd.service.html) для node_exporter:
 
 ![img.png](img.png)
+В systemd запуск сервиса выглядит так:
+
+[Unit]
+Description=Node Exporter
+
+[Service]
+User=root
+EnvironmentFile=-/etc/sysconfig/node_exporter
+ExecStart=/usr/local/bin/node_exporter $OPTIONS
+
+[Install]
+WantedBy=multi-user.target[Unit]
+Description=Node Exporter
 
 1. Ознакомьтесь с опциями node_exporter и выводом `/metrics` по-умолчанию. Приведите несколько опций, которые вы бы выбрали для базового мониторинга хоста по CPU, памяти, диску и сети.
 
