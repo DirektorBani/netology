@@ -10,3 +10,4 @@ for result in result_os.split('\n'):
         prepare_result = result.replace('\tmodified:   ', '')
         print(prepare_result)
         #break
+
