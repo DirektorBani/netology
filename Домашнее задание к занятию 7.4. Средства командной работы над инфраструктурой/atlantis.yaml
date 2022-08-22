@@ -1,0 +1,16 @@
+version: 3
+parallel_apply: true
+parallel_plan: true
+projects:
+- name: netology
+  dir: .
+  workspace: stage
+  autoplan:
+    when_modified: ["../terraform/**/*.tf", "*.tf"]
+    enabled: true
+- name: netology
+  dir: .
+  workspace: prod
+  autoplan:
+    when_modified: ["../terraform/**/*.tf", "*.tf"]
+    enabled: true
