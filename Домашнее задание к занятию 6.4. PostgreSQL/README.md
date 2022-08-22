@@ -63,10 +63,15 @@ insert into orders (id, title, price) select * from orders_simple;
 
 Как бы вы доработали бэкап-файл, чтобы добавить уникальность значения столбца `title` для таблиц `test_database`?
 
-Для определения занчения столбца title можно было бы использовать индекс, для обеспечения уникальности.
+Добавить ограничение UNIQUE
 
-![img_2.png](img_2.png)
-
+```
+CREATE TABLE public.orders (
+id integer NOT NULL,
+title character varying(80) NOT NULL UNIQUE,
+price integer DEFAULT 0
+);
+```
 ---
 
 ### Как cдавать задание
