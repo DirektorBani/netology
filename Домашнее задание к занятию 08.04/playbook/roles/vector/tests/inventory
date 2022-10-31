@@ -1,0 +1,6 @@
+vector:
+  hosts:
+    vector:
+      ansible_host: 51.250.103.111
+  vars:
+    ansible_user: master
