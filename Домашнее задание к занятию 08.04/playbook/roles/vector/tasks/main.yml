@@ -1,13 +1,8 @@
 ---
-# tasks file for vector-role
+- name: Download vector
+  ansible.builtin.get_url:
+    url: "{{ vector_base_url }}/{{ vector_version }}"
+    dest: "/tmp/{{ vector_version }}"
 - name: Install vector
-  hosts: vector
-  tasks:
-    - block:
-        - name: Download vector
-          ansible.builtin.get_url:
-            url: "{{ vector_base_url }}/{{ vector_version }}"
-            dest: "/tmp/{{ vector_version }}"
-        - name: Install vector
-          become: true
-          apt: deb="/tmp/{{ vector_version }}"
+  become: true
+  apt: deb="/tmp/{{ vector_version }}"

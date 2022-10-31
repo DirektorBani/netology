@@ -1,20 +1,12 @@
 ---
-- name: Install Lighthouse
-  hosts: lighthouse
-  gather_facts: false
+- name: Lighthouse. Pre-install nginx & git client
+  become: true
+  ansible.builtin.apt:
+    name: "{{ lighthouse_packages }}"
+    update_cache: true
 
-  tasks:
-    - block:
-        - name: Lighthouse. Pre-install nginx & git client
-          become: true
-          ansible.builtin.apt:
-            name: "{{ lighthouse_packages }}"
-            update_cache: true
-
-        - name: Lighthouse. Clone source code by git client
-          become: true
-          ansible.builtin.git:
-            repo: "{{ lighthouse_code_src }}"
-            dest: "{{ lighthouse_data_dir }}"
-
-      tags: lighthouse
+- name: Lighthouse. Clone source code by git client
+  become: true
+  ansible.builtin.git:
+    repo: "{{ lighthouse_code_src }}"
+    dest: "{{ lighthouse_data_dir }}"

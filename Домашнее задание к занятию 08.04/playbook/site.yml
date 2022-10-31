@@ -1,115 +1,21 @@
 ---
 - name: Install Clickhouse
   hosts: clickhouse
-  gather_facts: false
+  roles:
+    - clickhouse
 
-  handlers:
-    - name: Start clickhouse service
-      become: true
-      ansible.builtin.service:
-        name: clickhouse-server
-        state: restarted
-
-  tasks:
-    - block:
-        - block:
-            - name: Clickhouse. Get clickhouse distrib
-              ansible.builtin.get_url:
-                url: "{{ item }}"
-                dest: "./{{ item }}"
-                mode: 0644
-              with_items: "{{ clickhouse_packages }}"
-          rescue:
-            - name: Clickhouse. Get clickhouse distrib
-              ansible.builtin.get_url:
-                url: "https://packages.clickhouse.com/deb/pool/main/c/clickhouse-common-static/clickhouse-common-static_{{ clickhouse_version }}_amd64.deb"
-                dest: "./clickhouse-common-static_{{ clickhouse_version }}_amd64.deb"
-                mode: 0644
-              with_items: "{{ clickhouse_packages }}"
-
-        - name: Clickhouse. Install packages
-          become: true
-          ansible.builtin.apt:
-            deb: "{{ item }}"
-          loop:
-            - "./clickhouse-common-static_22.3.3.44_amd64.deb"
-            - "./clickhouse-client_22.3.3.44_all.deb"
-            - "./clickhouse-server_22.3.3.44_all.deb"
-          notify: Start clickhouse service
-
-        - name: Clickhouse. Modify config.xml
-          become: true
-          ansible.builtin.replace:
-            backup: true
-            path: "/etc/clickhouse-server/config.xml"
-            regexp: '^    <!-- <listen_host>0.0.0.0</listen_host> -->$'
-            replace: '    <listen_host>0.0.0.0</listen_host>'
-          notify: Start clickhouse service
-
-        - name: Clickhouse. Flush handlers
-          ansible.builtin.meta: flush_handlers
-
-        - name: Clickhouse. Waiting while clickhouse-server is available...
-          ansible.builtin.pause:
-            seconds: 30
-            echo: false
-
-        - name: Clickhouse. Create database
-          ansible.builtin.command: "clickhouse-client --host clickhouse --port 9000 -q 'create database logs;'"
-          register: create_db
-          failed_when: create_db.rc != 0 and create_db.rc !=82
-          changed_when: create_db.rc == 0
-
-        - name: Clickhouse. Create table
-          ansible.builtin.command: "clickhouse-client --host clickhouse --port 9000 -q 'create table logs.{{ all_clickhouse_table }} (message String) ENGINE = MergeTree() ORDER BY tuple();'"
-
-      tags: clickhouse
+- name: Install nginx
+  hosts: lighthouse
+  roles:
+    - nginx
 
 - name: Install vector
   hosts: vector
-  tasks:
-    - block:
-        - name: Download vector
-          ansible.builtin.get_url:
-            url: "{{ vector_base_url }}/{{ vector_version }}"
-            dest: "/tmp/{{ vector_version }}"
-        - name: Install vector
-          become: true
-          apt: deb="/tmp/{{ vector_version }}"
+  roles:
+    - vector
 
-- name: Install Lighthouse
+- name: Install lighthouse
   hosts: lighthouse
-  gather_facts: false
+  roles:
+    - lighthouse
 
-  handlers:
-    - name: Start Lighthouse service
-      become: true
-      ansible.builtin.systemd:
-        daemon_reload: true
-        enabled: false
-        name: nginx.service
-        state: started
-
-  tasks:
-    - block:
-        - name: Lighthouse. Pre-install nginx & git client
-          become: true
-          ansible.builtin.apt:
-            name: "{{ lighthouse_packages }}"
-            update_cache: true
-
-        - name: Lighthouse. Clone source code by git client
-          become: true
-          ansible.builtin.git:
-            repo: "{{ lighthouse_code_src }}"
-            dest: "{{ lighthouse_data_dir }}"
-
-        - name: Lighthouse. Prepare nginx config
-          become: true
-          ansible.builtin.template:
-            src: "templates/nginx/ligthouse.conf.j2"
-            dest: "/etc/nginx/conf.d/{{ lighthouse_nginx_conf }}"
-            mode: 0644
-          notify: Start Lighthouse service
-
-      tags: lighthouse
