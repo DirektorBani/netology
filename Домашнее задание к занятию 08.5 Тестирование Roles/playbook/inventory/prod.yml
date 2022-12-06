@@ -1,0 +1,21 @@
+---
+clickhouse:
+  hosts:
+    clickhouse:
+      ansible_host: 51.250.96.198
+  vars:
+    ansible_user: master
+
+vector:
+  hosts:
+    vector:
+      ansible_host: 51.250.103.111
+  vars:
+    ansible_user: master
+
+lighthouse:
+  hosts:
+    lighthouse:
+      ansible_host: 158.160.10.10
+  vars:
+    ansible_user: master

@@ -1,0 +1,8 @@
+---
+- name: Download vector
+  ansible.builtin.get_url:
+    url: "{{ vector_base_url }}/{{ vector_version }}"
+    dest: "/tmp/{{ vector_version }}"
+- name: Install vector
+  become: true
+  apt: deb="/tmp/{{ vector_version }}"

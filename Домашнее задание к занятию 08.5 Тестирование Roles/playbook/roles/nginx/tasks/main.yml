@@ -1,0 +1,8 @@
+---
+- name: Lighthouse. Prepare nginx config
+  become: true
+  ansible.builtin.template:
+    src: "templates/nginx/ligthouse.conf.j2"
+    dest: "/etc/nginx/conf.d/{{ lighthouse_nginx_conf }}"
+    mode: 0644
+  notify: Start Lighthouse service
