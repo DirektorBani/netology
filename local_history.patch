@@ -1,0 +1,675 @@
+Index: Домашнее задание к занятию 09.03 CICD/ansible/site.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/site.yml b/Домашнее задание к занятию 09.03 CICD/ansible/site.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/site.yml	
++++ /dev/null	
+@@ -1,382 +0,0 @@
+----
+-- name: Get OpenJDK installed
+-  hosts: sonarqube
+-  pre_tasks:
+-    - name: install unzip
+-      become: true
+-      yum:
+-        name: unzip
+-        state: present
+-  tasks:
+-    - name: Upload .tar.gz file conaining binaries from remote storage
+-      get_url:
+-        url: "{{ jdk_url }}"
+-        dest: "/tmp/jdk-{{ jdk_distr_name }}"
+-        mode: 0755
+-      register: download_java_remote_binaries
+-      until: download_java_remote_binaries is succeeded
+-
+-    - name: Ensure installation dir exists
+-      become: true
+-      file:
+-        state: directory
+-        path: "{{ java_home }}"
+-        mode: 0755
+-
+-    - name: Extract java in the installation directory
+-      become: true
+-      unarchive:
+-        copy: false
+-        src: "/tmp/jdk-{{ jdk_distr_name }}"
+-        dest: "{{ java_home }}"
+-        extra_opts: [--strip-components=1]
+-        creates: "{{ java_home }}/bin/java"
+-
+-    - name: Export environment variables
+-      become: true
+-      template:
+-        src: jdk.sh.j2
+-        dest: /etc/profile.d/jdk.sh
+-        owner: root
+-        group: root
+-        mode: 0644
+-
+-- name: Get PostgreSQL installed
+-  hosts: postgres
+-  become: true
+-  tasks:
+-    - name: Change repo file
+-      copy:
+-        src: CentOS-Base.repo
+-        dest: /etc/yum.repos.d/CentOS-Base.repo
+-        mode: 0644
+-        owner: root
+-        group: root
+-
+-    - name: Install PostgreSQL repos
+-      yum:
+-        name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+-        state: present
+-        validate_certs: false
+-
+-    - name: Install PostgreSQL
+-      yum:
+-        name: "postgresql{{ postgresql_version }}-server"
+-        state: present
+-
+-    - name: Init template1 DB
+-      command: /usr/pgsql-11/bin/postgresql-11-setup initdb
+-      failed_when: false
+-
+-    - name: Start pgsql service
+-      systemd:
+-        name: "postgresql-{{ postgresql_version }}"
+-        state: started
+-        enabled: true
+-
+-    - name: Create user in system
+-      user:
+-        name: "{{ sonarqube_db_user }}"
+-    - name: Create user for Sonar in PostgreSQL
+-      become_user: postgres
+-      command: "createuser -s -e {{ sonarqube_db_user }}"
+-      failed_when: false
+-
+-    - name: Change password for Sonar user in PostgreSQL
+-      become_user: postgres
+-      command: "psql -c \"ALTER USER sonar WITH ENCRYPTED password '{{ sonarqube_db_password }}';\""
+-
+-    - name: Create Sonar DB
+-      become_user: postgres
+-      command: "createdb {{ sonarqube_db_name }}"
+-      failed_when: false
+-
+-    - name: Copy pg_hba.conf
+-      copy:
+-        src: pg_hba.conf
+-        dest: /var/lib/pgsql/11/data/pg_hba.conf
+-        mode: 0600
+-        owner: postgres
+-        group: postgres
+-
+-- name: Prepare Sonar host
+-  hosts: sonarqube
+-  become: true
+-  tasks:
+-    - name: Create group in system
+-      group:
+-        name: "{{ sonarqube_db_user }}"
+-        state: present
+-
+-    - name: Create user in system
+-      user:
+-        name: "{{ sonarqube_db_user }}"
+-        group: "{{ sonarqube_db_user }}"
+-
+-    - name: "Set up ssh key to access for managed node"
+-      authorized_key:
+-        user: "{{ sonarqube_db_user }}"
+-        state: present
+-        key: "{{ lookup('file', 'id_rsa.pub') }}"
+-
+-    - name: "Allow group to have passwordless sudo"
+-      lineinfile:
+-        dest: /etc/sudoers
+-        state: present
+-        regexp: '^%{{ sonarqube_db_user }}'
+-        line: '%{{ sonarqube_db_user }} ALL=(ALL) NOPASSWD: ALL'
+-        validate: 'visudo -cf %s'
+-
+-    - name: Increase Virtual Memory
+-      lineinfile:
+-        dest: /etc/sysctl.conf
+-        state: present
+-        regexp: '^vm.max_map_count'
+-        line: 'vm.max_map_count=262144'
+-    - name: Reboot VM
+-      reboot:
+-
+-- name: Get Sonarqube installed
+-  hosts: sonarqube
+-  vars: 
+-    ansible_user: "{{ sonarqube_db_user }}"
+-  tasks:
+-    - name: Get distrib ZIP
+-      get_url:
+-        url: "{{ sonar_download_url }}"
+-        dest: "/tmp/{{ sonar_version_directory }}.zip"
+-        validate_certs: false
+-
+-    - name: Unzip Sonar
+-      become: true
+-      unarchive:
+-        src: "/tmp/{{ sonar_version_directory }}.zip"
+-        dest: /usr/local/
+-        copy: false
+-        owner: "{{ sonarqube_db_user }}"
+-        group: "{{ sonarqube_db_user }}"
+-        creates: /usr/local/sonar/COPYING
+-
+-    - name: Move Sonar into place.
+-      become: true
+-      copy:
+-        src: /usr/local/{{ sonar_version_directory }}/
+-        dest: /usr/local/sonar/
+-        owner: "{{ sonarqube_db_user }}"
+-        group: "{{ sonarqube_db_user }}"
+-        remote_src: true
+-
+-    - name: Configure SonarQube JDBC settings for PostgreSQL.
+-      lineinfile:
+-        dest: /usr/local/sonar/conf/sonar.properties
+-        regexp: "{{ item.regexp }}"
+-        line: "{{ item.line }}"
+-      with_items:
+-        - regexp: "^sonar.jdbc.username"
+-          line: "sonar.jdbc.username={{ sonarqube_db_user }}"
+-        - regexp: "^sonar.jdbc.password"
+-          line: "sonar.jdbc.password={{ sonarqube_db_password }}"
+-        - regexp: "^sonar.jdbc.url"
+-          line: "sonar.jdbc.url=jdbc:postgresql://localhost:{{ sonar_db_port }}/{{ sonarqube_db_name }}?useUnicode=true&characterEncoding=utf8&rewriteBatchedStatements=true&useConfigs=maxPerformance"
+-        - regexp: "^sonar.web.context"
+-          line: "sonar.web.context={{ sonar_web_context }}"
+-    
+-    - name: Generate wrapper.conf
+-      template:
+-        src: wrapper.conf.j2
+-        dest: /usr/local/sonar/conf/wrapper.conf
+-        mode: 0644
+-
+-    - name: Symlink sonar bin.
+-      become: true
+-      file:
+-        src: /usr/local/sonar/bin/linux-x86-64/sonar.sh
+-        dest: /usr/bin/sonar
+-        state: link
+-      register: sonar_symlink
+-
+-    - name: Copy SonarQube systemd unit file into place (for systemd systems).
+-      become: true
+-      template:
+-        src: sonar.unit.j2
+-        dest: /etc/systemd/system/sonar.service
+-        owner: root
+-        group: root
+-        mode: 0755
+-
+-    - name: Ensure Sonar is running and set to start on boot.
+-      become: true
+-      service:
+-        name: sonar
+-        state: restarted
+-        enabled: true
+-
+-    - name: Allow Sonar time to build on first start.
+-      pause:
+-        seconds: 180
+-      when: sonar_symlink.changed
+-      tags: ['skip_ansible_lint']
+-
+-    - name: Make sure Sonar is responding on the configured port.
+-      wait_for:
+-        port: 9000
+-        delay: 3
+-        timeout: 300
+-- name: Get Nexus installed
+-  hosts: nexus
+-  pre_tasks:
+-    - name: Create Nexus group
+-      become: true
+-      group:
+-        name: "{{ nexus_user_group }}"
+-        state: present
+-    - name: Create Nexus user
+-      become: true
+-      user:
+-        name: "{{ nexus_user_name }}"
+-    - name: Install JDK
+-      become: true
+-      package:
+-        name: [java-1.8.0-openjdk, java-1.8.0-openjdk-devel]
+-        state: present
+-  tasks:
+-    - name: Create Nexus directories
+-      become: true
+-      file:
+-        group: "{{ nexus_user_group }}"
+-        owner: "{{ nexus_user_name }}"
+-        path: "{{ item }}"
+-        state: directory
+-      with_items:
+-        - "{{ nexus_directory_log }}"
+-        - "{{ nexus_directory_data }}"
+-        - "{{ nexus_directory_data }}/etc"
+-        - "{{ nexus_directory_package }}"
+-        - "{{ nexus_directory_tmp }}"
+-
+-    - name: Download Nexus
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      get_url:
+-        dest: "{{ nexus_directory_package }}/nexus-{{ nexus_version }}.tar.gz"
+-        url: "{{ nexus_download_url }}/nexus-{{ nexus_version }}-unix.tar.gz"
+-        validate_certs: false
+-
+-    - name: Unpack Nexus
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      unarchive:
+-        copy: no
+-        creates: "{{ nexus_directory_package }}/nexus-{{ nexus_version }}"
+-        dest: "{{ nexus_directory_package }}"
+-        src: "{{ nexus_directory_package }}/nexus-{{ nexus_version }}.tar.gz"
+-
+-    - name: Link to Nexus Directory
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      file:
+-        dest: "{{ nexus_directory_home }}"
+-        src: "{{ nexus_directory_package }}/nexus-{{ nexus_version }}"
+-        state: link
+-
+-    - name: Add NEXUS_HOME for Nexus user
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      lineinfile:
+-        create: yes
+-        dest: "/home/{{ nexus_user_name }}/.bashrc"
+-        insertafter: EOF
+-        line: "export NEXUS_HOME={{ nexus_directory_home }}"
+-
+-    - name: Add run_as_user to Nexus.rc
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      lineinfile:
+-        create: yes
+-        dest: "{{ nexus_directory_home }}/bin/nexus.rc"
+-        insertafter: EOF
+-        line: "run_as_user=\"{{ nexus_user_name }}\""
+-        regexp: "^run_as_user"
+-
+-    - name: Raise nofile limit for Nexus user
+-      become: true
+-      pam_limits:
+-        domain: "{{ nexus_user_name }}"
+-        limit_type: "-"
+-        limit_item: nofile
+-        value: "{{ nexus_ulimit }}"
+-
+-    - name: Create Nexus service for SystemD
+-      become: true
+-      template:
+-        dest: /lib/systemd/system/nexus.service
+-        mode: 0644
+-        src: nexus.systemd.j2
+-
+-    - name: Ensure Nexus service is enabled for SystemD
+-      become: true
+-      systemd:
+-        daemon_reload: yes
+-        enabled: yes
+-        name: nexus
+-      when:
+-        - nexus_service_enabled
+-
+-    - name: Create Nexus vmoptions
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      template:
+-        dest: "{{ nexus_directory_home }}/bin/nexus.vmoptions"
+-        src: nexus.vmoptions.j2
+-      register: nexus_config_changed
+-
+-    - name: Create Nexus properties
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      template:
+-        dest: "{{ nexus_directory_data }}/etc/nexus.properties"
+-        src: nexus.properties.j2
+-      register: nexus_config_changed
+-
+-    - name: Lower Nexus disk space threshold
+-      become: true
+-      become_user: "{{ nexus_user_name }}"
+-      lineinfile:
+-        backrefs: yes
+-        dest: "{{ nexus_directory_home }}/etc/karaf/system.properties"
+-        insertafter: EOF
+-        line: "storage.diskCache.diskFreeSpaceLimit={{ nexus_configuration_disk_free_space_limit }}"
+-        regexp: ^storage\.diskCache\.diskFreeSpaceLimit
+-      when: nexus_configuration_disk_free_space_limit is not none
+-      register: nexus_config_changed
+-
+-    - name: Start Nexus service if enabled
+-      become: true
+-      service:
+-        enabled: yes
+-        name: nexus
+-        state: started
+-      when:
+-        - nexus_service_start_on_boot
+-        - not nexus_config_changed.changed
+-      tags:
+-        - skip_ansible_lint
+-
+-    - name: Ensure Nexus service is restarted
+-      become: true
+-      service:
+-        name: nexus
+-        state: restarted
+-      when:
+-        - nexus_service_start_on_boot
+-        - nexus_config_changed.changed
+-      tags:
+-        - skip_ansible_lint
+-
+-    - name: Wait for Nexus port if started
+-      wait_for:
+-        port: "{{ nexus_port }}"
+-        state: started
+-        timeout: "{{ nexus_port_check_timeout }}"
+-      when:
+-        - nexus_service_start_on_boot
+Index: Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/hosts.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/hosts.yml b/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/hosts.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/hosts.yml	
++++ /dev/null	
+@@ -1,20 +0,0 @@
+----
+-all:
+-  hosts:
+-    sonar-01:
+-      ansible_host: 158.160.3.120
+-    nexus-01:
+-      ansible_host: 158.160.21.217
+-  children:
+-    sonarqube:
+-      hosts:
+-        sonar-01:
+-    nexus:
+-      hosts:
+-        nexus-01:
+-    postgres:
+-      hosts:
+-        sonar-01:
+-  vars:
+-    ansible_connection_type: paramiko
+-    ansible_user: master
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/all.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/all.yml b/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/all.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/all.yml	
++++ /dev/null	
+@@ -1,8 +0,0 @@
+----
+-jdk_url: https://download.java.net/openjdk/jdk11/ri/openjdk-11+28_linux-x64_bin.tar.gz
+-jdk_distr_name: openjdk-11+28_linux-x64_bin.tar.gz
+-jdk_folder: "{{ jdk_distr_name.split('-')[:2] | join('-')  }}"
+-java_home: "/opt/jdk/{{ jdk_folder }}"
+-sonarqube_db_name: sonar
+-sonarqube_db_user: sonar
+-sonarqube_db_password: sonar
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/nexus.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/nexus.yml b/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/nexus.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/nexus.yml	
++++ /dev/null	
+@@ -1,22 +0,0 @@
+----
+-nexus_user_group: nexus
+-nexus_user_name: nexus
+-nexus_directory_data: "/home/{{ nexus_user_name }}/sonatype-work/nexus3"
+-nexus_directory_home: "/home/{{ nexus_user_name }}/nexus"
+-nexus_directory_log: "/home/{{ nexus_user_name }}/log"
+-nexus_directory_package: "/home/{{ nexus_user_name }}/pkg"
+-nexus_directory_tmp: "/home/{{ nexus_user_name }}/tmp"
+-nexus_version: 3.14.0-04
+-nexus_download_url: https://download.sonatype.com/nexus/3
+-nexus_service_enabled: true
+-nexus_ulimit: 65536
+-nexus_context_path: /
+-nexus_host: 0.0.0.0
+-nexus_port: 8081
+-nexus_port_check_timeout: 600
+-nexus_edition: nexus-oss-edition
+-nexus_features: nexus-oss-feature
+-nexus_java_heap_size: 1200M
+-nexus_java_max_direct_memory: 2G
+-nexus_service_start_on_boot: true
+-nexus_configuration_disk_free_space_limit: ~
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/postgres.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/postgres.yml b/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/postgres.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/postgres.yml	
++++ /dev/null	
+@@ -1,1 +0,0 @@
+-postgresql_version: 11
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/sonarqube.yml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/sonarqube.yml b/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/sonarqube.yml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/ansible/inventory/cicd/group_vars/sonarqube.yml	
++++ /dev/null	
+@@ -1,5 +0,0 @@
+-sonar_version: 9.1.0.47736
+-sonar_download_url: "https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-{{ sonar_version }}.zip"
+-sonar_version_directory: "sonarqube-{{ sonar_version }}"
+-sonar_db_port: "5432"
+-sonar_web_context: ''
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/pom.xml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/pom.xml b/Домашнее задание к занятию 09.03 CICD/pom.xml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/pom.xml	
++++ /dev/null	
+@@ -1,23 +0,0 @@
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+-    <modelVersion>4.0.0</modelVersion>
+-    <groupId>com.netology.app</groupId>
+-    <artifactId>simple-app</artifactId>
+-    <version>1.0-SNAPSHOT</version>
+-    <repositories>
+-        <repository>
+-            <id>my-repo</id>
+-            <name>maven-public</name>
+-            <url>http://158.160.21.217:8081/repository/maven-public/</url>
+-        </repository>
+-    </repositories>
+-    <dependencies>
+-            <dependency>
+-              <groupId>netology</groupId>
+-              <artifactId>java</artifactId>
+-              <version>8_282</version>
+-              <classifier>distrib</classifier>
+-              <type>tar.gz</type>
+-            </dependency>
+-    </dependencies>
+-</project>
+\ No newline at end of file
+Index: Домашнее задание к занятию 09.03 CICD/README.md
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/README.md b/Домашнее задание к занятию 09.03 CICD/README.md
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/README.md	
++++ /dev/null	
+@@ -1,68 +0,0 @@
+-# Домашнее задание к занятию "09.03 CI\CD"
+-
+-## Подготовка к выполнению
+-
+-1. Создаём 2 VM в yandex cloud со следующими параметрами: 2CPU 4RAM Centos7(остальное по минимальным требованиям)
+-2. Прописываем в [inventory](./infrastructure/inventory/cicd/hosts.yml) [playbook'a](./infrastructure/site.yml) созданные хосты
+-3. Добавляем в [files](./infrastructure/files/) файл со своим публичным ключом (id_rsa.pub). Если ключ называется иначе - найдите таску в плейбуке, которая использует id_rsa.pub имя и исправьте на своё
+-4. Запускаем playbook, ожидаем успешного завершения
+-5. Проверяем готовность Sonarqube через [браузер](http://localhost:9000)
+-6. Заходим под admin\admin, меняем пароль на свой
+-7.  Проверяем готовность Nexus через [бразуер](http://localhost:8081)
+-8. Подключаемся под admin\admin123, меняем пароль, сохраняем анонимный доступ
+-
+-## Знакомоство с SonarQube
+-
+-### Основная часть
+-
+-1. Создаём новый проект, название произвольное
+-2. Скачиваем пакет sonar-scanner, который нам предлагает скачать сам sonarqube
+-3. Делаем так, чтобы binary был доступен через вызов в shell (или меняем переменную PATH или любой другой удобный вам способ)
+-4. Проверяем `sonar-scanner --version`
+-5. Запускаем анализатор против кода из директории [example](./example) с дополнительным ключом `-Dsonar.coverage.exclusions=fail.py`
+-6. Смотрим результат в интерфейсе
+-7. Исправляем ошибки, которые он выявил(включая warnings)
+-8. Запускаем анализатор повторно - проверяем, что QG пройдены успешно
+-9. Делаем скриншот успешного прохождения анализа, прикладываем к решению ДЗ
+-
+-![img.png](img.png)
+-
+-
+-## Знакомство с Nexus
+-
+-### Основная часть
+-
+-1. В репозиторий `maven-releases` загружаем артефакт с GAV параметрами:
+-    1. groupId: netology
+-    2. artifactId: java
+-    3. version: 8_282
+-    4. classifier: distrib
+-    5. type: tar.gz
+-2. В него же загружаем такой же артефакт, но с version: 8_102
+-3. Проверяем, что все файлы загрузились успешно
+-4. В ответе присылаем файл `maven-metadata.xml` для этого артефекта
+-
+-[maven-metadata.xml](maven-metadata.xml)
+-
+-### Знакомство с Maven
+-
+-### Подготовка к выполнению
+-
+-1. Скачиваем дистрибутив с [maven](https://maven.apache.org/download.cgi)
+-2. Разархивируем, делаем так, чтобы binary был доступен через вызов в shell (или меняем переменную PATH или любой другой удобный вам способ)
+-3. Удаляем из `apache-maven-<version>/conf/settings.xml` упоминание о правиле, отвергающем http соединение( раздел mirrors->id: my-repository-http-blocker)
+-4. Проверяем `mvn --version`
+-5. Забираем директорию [mvn](./mvn) с pom
+-
+-### Основная часть
+-
+-1. Меняем в `pom.xml` блок с зависимостями под наш артефакт из первого пункта задания для Nexus (java с версией 8_282)
+-2. Запускаем команду `mvn package` в директории с `pom.xml`, ожидаем успешного окончания
+-3. Проверяем директорию `~/.m2/repository/`, находим наш артефакт
+-4. В ответе присылаем исправленный файл `pom.xml`
+-
+-[pom.xml](pom.xml)
+-
+----
+-
+-
+Index: Домашнее задание к занятию 09.03 CICD/maven-metadata.xml
+===================================================================
+diff --git a/Домашнее задание к занятию 09.03 CICD/maven-metadata.xml b/Домашнее задание к занятию 09.03 CICD/maven-metadata.xml
+deleted file mode 100644
+--- a/Домашнее задание к занятию 09.03 CICD/maven-metadata.xml	
++++ /dev/null	
+@@ -1,13 +0,0 @@
+-<metadata modelVersion="1.1.0">
+-    <groupId>netology</groupId>
+-    <artifactId>java</artifactId>
+-    <versioning>
+-        <latest>8_282</latest>
+-        <release>8_282</release>
+-        <versions>
+-            <version>8_102</version>
+-            <version>8_282</version>
+-        </versions>
+-        <lastUpdated>20221210124823</lastUpdated>
+-    </versioning>
+-</metadata>
+\ No newline at end of file
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/files/pg_hba.conf b/Домашнее задание к занятию 09.03 CICD/ansible/files/pg_hba.conf
+deleted file mode 100644
+index b5c361a7b70ecf401f6fcdddc3f508f6850e8995..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/files/CentOS-Base.repo b/Домашнее задание к занятию 09.03 CICD/ansible/files/CentOS-Base.repo
+deleted file mode 100644
+index 0984327f03c51d6a4e6595637c3457edbaa3b95b..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/jdk.sh.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/jdk.sh.j2
+deleted file mode 100644
+index 39887b6abf07cd4dbb6399c6a6e76f388066b725..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/sonar.unit.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/sonar.unit.j2
+deleted file mode 100644
+index fb48c8067ccd6bfe8e269e2b6ce7fcb98b1ae0cc..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/wrapper.conf.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/wrapper.conf.j2
+deleted file mode 100644
+index bb271c188dd0c2302658cd6b16a3c8babe186d06..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.systemd.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.systemd.j2
+deleted file mode 100644
+index 7665d96a8cc005c5c16e05417ae0e0613d60f79d..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.vmoptions.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.vmoptions.j2
+deleted file mode 100644
+index dea2288a701ca2ff98a369a053e2b1fcebad2dee..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.properties.j2 b/Домашнее задание к занятию 09.03 CICD/ansible/templates/nexus.properties.j2
+deleted file mode 100644
+index aa26454639096df4869b3f253fa9c906c4221c0f..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
+diff --git a/Домашнее задание к занятию 09.03 CICD/img.png b/Домашнее задание к занятию 09.03 CICD/img.png
+deleted file mode 100644
+index 5a859ca0d76dd58edd76fa983791cc1c4500bbab..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+Hc$@<O00001
+
