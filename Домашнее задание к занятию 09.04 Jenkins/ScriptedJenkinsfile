@@ -1,0 +1,19 @@
+node("linux"){
+    stage("Git checkout"){
+        git 'https://github.com/aragastmatb/example-playbook.git'
+    }
+    stage("Sample define secret_check"){
+        secret_check=true
+    }
+    stage("Check is prod"){
+        prod=env.prod
+    }
+    stage("Run playbook"){
+        if (env.prod == 'true'){
+            sh 'ansible-playbook site.yml -i inventory/prod.yml'
+        }
+        else{
+            sh 'ansible-playbook site.yml -i inventory/prod.yml --check --diff'
+        }
+    }
+}
