@@ -35,4 +35,4 @@
 
 ![img.png](img.png)
 
-Ссылка на ремозиторий: https://github.com/DirektorBani/example-teamcity
+Ссылка на репозиторий: https://github.com/DirektorBani/example-teamcity
