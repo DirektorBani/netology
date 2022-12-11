@@ -11,6 +11,6 @@
 - 
 - Общий репозиторий роли https://github.com/DirektorBani/vector-role
 - ТЭГ с molecule https://github.com/DirektorBani/vector-role/tree/1.1.1
-- ТЕЭ с tox https://github.com/DirektorBani/vector-role/tree/1.1.2
+- ТЭГ с tox https://github.com/DirektorBani/vector-role/tree/1.1.2
 
 
