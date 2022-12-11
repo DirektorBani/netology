@@ -9,6 +9,8 @@
 Наша основная цель - настроить тестирование наших ролей. Задача: сделать сценарии тестирования для vector. Ожидаемый результат: все сценарии успешно проходят тестирование ролей.
 
 - 
-- https://github.com/DirektorBani/vector-role
+- Общий репозиторий роли https://github.com/DirektorBani/vector-role
+- ТЭГ с molecule https://github.com/DirektorBani/vector-role/tree/1.1.1
+- ТЕЭ с tox https://github.com/DirektorBani/vector-role/tree/1.1.2
 
 
