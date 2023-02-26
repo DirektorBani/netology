@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-multitool
+  labels:
+    app: busybox-multitool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: busybox-multitool
+  template:
+    metadata:
+      labels:
+        app: busybox-multitool
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:latest
+          command: ['sh', '-c', 'while true; do echo -n "READ ME" > /out/check.txt;date ; sleep 5; done']
+          volumeMounts:
+            - name: vol
+              mountPath: /out
+        - name: multitool
+          image: wbitt/network-multitool
+          command: ['sh', '-c', 'while true; do cat /in/check.txt;date ; sleep 5;done']
+          volumeMounts:
+            - name: vol
+              mountPath: /in
+          env:
+            - name: HTTP_PORT
+              value: "8080"
+            - name: HTTPS_PORT
+              value: "11443"
+      volumes:
+        - name: vol
+          hostPath:
+            path: /var/data
